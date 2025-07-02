@@ -8,6 +8,8 @@ let currentPlayer = 1; // 1 = Rot, 2 = Gelb
 let gameOver = false;
 let mode = getMode();
 let animating = false;
+let winner = 0;
+let hoverCol = -1; // aktuell gehighlightete Spalte
 
 function getMode() {
     const params = new URLSearchParams(window.location.search);
@@ -17,49 +19,72 @@ function getMode() {
 function render() {
     const game = document.getElementById('game');
     game.innerHTML = '';
-    // Brett
-    const table = document.createElement('table');
-    table.style.margin = '0 auto';
-    table.style.borderCollapse = 'separate';
-    table.style.borderSpacing = '8px 4px';
-    table.style.background = '#1877c9';
-    table.style.borderRadius = '18px';
-    table.style.boxShadow = '0 0 16px #bbb';
-    for (let r = 0; r < rows; r++) {
-        const tr = document.createElement('tr');
-        for (let c = 0; c < cols; c++) {
-            const td = document.createElement('td');
-            td.style.width = '54px';
-            td.style.height = '54px';
-            td.style.borderRadius = '50%';
-            td.style.background = '#fff';
-            td.style.boxShadow = 'inset 0 2px 8px #aaa';
-            td.style.position = 'relative';
-            td.style.transition = 'background 0.2s';
-            if (board[r][c] === 1) {
-                td.style.background = 'radial-gradient(circle at 60% 30%, #ff6666 70%, #c00 100%)';
-            }
-            if (board[r][c] === 2) {
-                td.style.background = 'radial-gradient(circle at 60% 30%, #ffe066 70%, #d4b200 100%)';
-            }
-            td.dataset.col = c;
-            tr.appendChild(td);
-        }
-        table.appendChild(tr);
-    }
-    game.appendChild(table);
+    // SVG-Board
+    const w = 420, h = 360, cell = 60, margin = 10;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("width", w);
+    svg.setAttribute("height", h);
+    svg.style.display = "block";
+    svg.style.margin = "0 auto";
+    svg.style.background = "#1877c9";
+    svg.style.borderRadius = "18px";
+    svg.style.boxShadow = "0 0 16px #bbb";
+    svg.style.touchAction = "none";
 
-    // Hover-Effekt für mögliche Spalten
-    if (!gameOver && !animating) {
+    // Felder (mit Hover-Highlight)
+    for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-            let topCell = table.rows[0].cells[c];
-            topCell.style.cursor = 'pointer';
-            topCell.onmouseenter = () => highlightColumn(table, c, true);
-            topCell.onmouseleave = () => highlightColumn(table, c, false);
-            topCell.onclick = () => handleMoveAnimated(c);
-            topCell.ontouchstart = () => handleMoveAnimated(c);
+            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("cx", c * cell + cell/2 + margin);
+            circle.setAttribute("cy", r * cell + cell/2 + margin);
+            circle.setAttribute("r", cell/2 - 6);
+            if (hoverCol === c && !gameOver && !animating && board[0][c] === 0) {
+                circle.setAttribute("stroke", "#ffe066");
+                circle.setAttribute("stroke-width", "4");
+            } else {
+                circle.setAttribute("stroke", "#fff");
+                circle.setAttribute("stroke-width", "0");
+            }
+            circle.setAttribute("fill", "#fff");
+            svg.appendChild(circle);
         }
     }
+    // Steine
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (board[r][c] !== 0) {
+                const stone = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                stone.setAttribute("cx", c * cell + cell/2 + margin);
+                stone.setAttribute("cy", r * cell + cell/2 + margin);
+                stone.setAttribute("r", cell/2 - 10);
+                stone.setAttribute("fill", board[r][c] === 1
+                    ? "url(#redGrad)" : "url(#yellowGrad)");
+                stone.setAttribute("stroke", "#888");
+                stone.setAttribute("stroke-width", "2");
+                svg.appendChild(stone);
+            }
+        }
+    }
+    // Farbverlauf für Steine
+    const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    defs.innerHTML = `
+      <radialGradient id="redGrad" cx="60%" cy="30%" r="70%">
+        <stop offset="0%" stop-color="#fff"/>
+        <stop offset="70%" stop-color="#ff6666"/>
+        <stop offset="100%" stop-color="#c00"/>
+      </radialGradient>
+      <radialGradient id="yellowGrad" cx="60%" cy="30%" r="70%">
+        <stop offset="0%" stop-color="#fff"/>
+        <stop offset="70%" stop-color="#ffe066"/>
+        <stop offset="100%" stop-color="#d4b200"/>
+      </radialGradient>
+    `;
+    svg.appendChild(defs);
+
+    game.appendChild(svg);
+
+    // Event-Handler für Hover und Klicks
+    setTimeout(() => setSVGListeners(svg), 0);
 
     // Info/Meldung unter dem Spielfeld
     const info = document.createElement('div');
@@ -68,7 +93,7 @@ function render() {
     info.style.minHeight = '1.5em';
     if (gameOver) {
         info.innerText = winnerText();
-        info.style.color = (currentPlayer === 1 ? '#c00' : '#bfa600');
+        info.style.color = (winner === 1 ? '#c00' : winner === 2 ? '#bfa600' : '#222');
         info.style.fontWeight = 'bold';
     } else {
         info.innerHTML = `<span style="color:${currentPlayer===1?'#c00':'#bfa600'};font-weight:bold">${currentPlayer===1?'Rot':'Gelb'}</span> ist am Zug`;
@@ -89,13 +114,51 @@ function render() {
     game.appendChild(resetBtn);
 }
 
-function highlightColumn(table, col, on) {
-    for (let r = 0; r < rows; r++) {
-        let cell = table.rows[r].cells[col];
-        if (on && board[r][col] === 0) {
-            cell.style.boxShadow = '0 0 0 4px #ffe066, inset 0 2px 8px #aaa';
-        } else {
-            cell.style.boxShadow = 'inset 0 2px 8px #aaa';
+function setSVGListeners(svg) {
+    const cell = 60, margin = 10;
+    svg.onmousemove = function(e) {
+        if (gameOver || animating) return;
+        const rect = svg.getBoundingClientRect();
+        const x = e.touches ? e.touches[0].clientX : e.clientX;
+        const col = Math.floor((x - rect.left - margin) / cell);
+        if (col !== hoverCol) {
+            hoverCol = (col >= 0 && col < cols) ? col : -1;
+            render();
+        }
+    };
+    svg.onmouseleave = function() {
+        if (hoverCol !== -1) {
+            hoverCol = -1;
+            render();
+        }
+    };
+    svg.onclick = function(e) {
+        if (gameOver || animating) return;
+        const rect = svg.getBoundingClientRect();
+        const x = e.touches ? e.touches[0].clientX : e.clientX;
+        const col = Math.floor((x - rect.left - margin) / cell);
+        if (col >= 0 && col < cols) handleMoveAnimated(col);
+    };
+    svg.ontouchstart = function(e) {
+        svg.onclick(e);
+    };
+}
+
+function highlightColumn(svg, col, on) {
+    // Hebt die Spalte optisch hervor
+    const cell = 60, margin = 10;
+    for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows; r++) {
+            const idx = r * cols + c;
+            const circle = svg.childNodes[idx + 1]; // +1 wegen defs
+            if (!circle || circle.tagName !== "circle") continue;
+            if (on && c === col && board[0][c] === 0) {
+                circle.setAttribute("stroke", "#ffe066");
+                circle.setAttribute("stroke-width", "4");
+            } else {
+                circle.setAttribute("stroke", "#fff");
+                circle.setAttribute("stroke-width", "0");
+            }
         }
     }
 }
@@ -124,26 +187,27 @@ function handleMoveAnimated(col) {
         } else {
             animRow++;
         }
-    }, 40);
+    }, 35);
 }
 
 function finishMove(r, c) {
     if (checkWin(r, c)) {
         gameOver = true;
+        winner = currentPlayer;
     } else if (board.flat().every(x => x !== 0)) {
         gameOver = true;
-        currentPlayer = 0; // Unentschieden
+        winner = 0;
     } else {
         currentPlayer = 3 - currentPlayer;
         if (mode === 'computer' && currentPlayer === 2 && !gameOver) {
-            setTimeout(computerMove, 600);
+            setTimeout(computerMove, 500);
         }
     }
     render();
 }
 
 function computerMove() {
-    // Einfache KI: Gewinnzug, Blockzug, sonst zufällig
+    // KI: Gewinnzug, Blockzug, sonst zufällig
     let validCols = [];
     for (let c = 0; c < cols; c++) {
         if (board[0][c] === 0) validCols.push(c);
@@ -196,8 +260,8 @@ function checkWinSim(b, r, c, player) {
 }
 
 function winnerText() {
-    if (currentPlayer === 0) return 'Unentschieden!';
-    return (currentPlayer === 1 ? 'Rot' : 'Gelb') + ' gewinnt!';
+    if (winner === 0) return 'Unentschieden!';
+    return (winner === 1 ? 'Rot' : 'Gelb') + ' gewinnt!';
 }
 
 function resetGame() {
@@ -205,10 +269,11 @@ function resetGame() {
     currentPlayer = 1;
     gameOver = false;
     animating = false;
+    winner = 0;
     render();
 }
 
 render();
 if (mode === 'computer' && currentPlayer === 2 && !gameOver) {
-    setTimeout(computerMove, 600);
+    setTimeout(computerMove, 500);
 }
