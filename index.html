@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Spieleportal</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Willkommen im Spieleportal!</h1>
+    <p>Wähle ein Spiel:</p>
+    <div class="game-list">
+        <button onclick="selectGame('vierGewinnt')">4 Gewinnt</button>
+        <button onclick="selectGame('pong')">Pong</button>
+        <button onclick="selectGame('schach')">Schach</button>
+        <button onclick="selectGame('schiffeVersenken')">Schiffe versenken</button>
+    </div>
+    <div id="mode-selection" style="display:none;">
+        <p>Spielmodus wählen:</p>
+        <button onclick="startGame('computer')">Gegen Computer</button>
+        <button onclick="startGame('zweispieler')">Zu zweit</button>
+    </div>
+    <script src="main.js"></script>
+</body>
+</html>
