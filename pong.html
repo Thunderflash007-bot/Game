@@ -4,8 +4,30 @@
     <meta charset="UTF-8">
     <title>Pong</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        .menu-btn {
+            position: absolute;
+            top: 18px;
+            right: 24px;
+            z-index: 10;
+            padding: 10px 26px;
+            font-size: 1.1em;
+            border-radius: 12px;
+            border: none;
+            background: linear-gradient(90deg,#ffe066,#1877c9);
+            color: #222;
+            box-shadow: 0 2px 8px #bbb;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .menu-btn:hover {
+            background: linear-gradient(90deg,#1877c9,#ffe066);
+        }
+    </style>
 </head>
 <body>
+    <button class="menu-btn" onclick="window.location.href='index.html'">Menü</button>
     <h1>Pong</h1>
     <div id="game"></div>
     <button onclick="window.location.href='index.html'">Zurück</button>
