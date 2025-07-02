@@ -1,7 +1,7 @@
 document.getElementById('game').innerText = 'Hier kommt das Schach Spiel hin.';
 // Minimal Chessboard, 2 Spieler oder gegen Computer (macht Zufallszug)
 const size = 8;
-let board = [
+const initialBoard = () => [
     ['r','n','b','q','k','b','n','r'],
     ['p','p','p','p','p','p','p','p'],
     ['','','','','','','',''],
@@ -11,35 +11,45 @@ let board = [
     ['P','P','P','P','P','P','P','P'],
     ['R','N','B','Q','K','B','N','R']
 ];
-let current = 'w'; // w: weiß, b: schwarz
+let board = initialBoard();
+let current = 'w'; // 'w' = Weiß, 'b' = Schwarz
 let selected = null;
+let highlightMoves = [];
 let gameOver = false;
-let mode = 'zweispieler';
+let promoteInfo = null;
+let infoMsg = '';
+let mode = getMode();
 
 function getMode() {
     const params = new URLSearchParams(window.location.search);
     return params.get('mode') || 'zweispieler';
 }
-mode = getMode();
 
 function render() {
     const game = document.getElementById('game');
     game.innerHTML = '';
+    // Brett
     const table = document.createElement('table');
     table.style.margin = '0 auto';
     table.style.borderCollapse = 'collapse';
+    table.style.boxShadow = '0 0 16px #bbb';
     for (let r = 0; r < size; r++) {
         const tr = document.createElement('tr');
         for (let c = 0; c < size; c++) {
             const td = document.createElement('td');
-            td.style.width = '40px';
-            td.style.height = '40px';
+            td.style.width = '48px';
+            td.style.height = '48px';
             td.style.textAlign = 'center';
-            td.style.fontSize = '28px';
+            td.style.fontSize = '32px';
             td.style.border = '1px solid #333';
-            td.style.background = (r + c) % 2 === 0 ? '#eee' : '#888';
+            td.style.cursor = 'pointer';
+            td.style.background = (r + c) % 2 === 0 ? '#f0d9b5' : '#b58863';
+            // Auswahl und mögliche Züge hervorheben
             if (selected && selected[0] === r && selected[1] === c) {
-                td.style.background = '#ff0';
+                td.style.background = '#ffe066';
+            }
+            if (highlightMoves.some(([mr, mc]) => mr === r && mc === c)) {
+                td.style.background = '#8fd694';
             }
             td.dataset.r = r;
             td.dataset.c = c;
@@ -50,29 +60,88 @@ function render() {
     }
     game.appendChild(table);
 
-    table.addEventListener('click', handleInput);
-    table.addEventListener('touchstart', function(e) {
+    // Event-Listener
+    setTimeout(() => setTableListeners(table), 0);
+
+    // Bauernumwandlung
+    if (promoteInfo) {
+        const promoDiv = document.createElement('div');
+        promoDiv.style.margin = '18px auto 0 auto';
+        promoDiv.style.textAlign = 'center';
+        promoDiv.style.maxWidth = '400px';
+        promoDiv.style.background = '#fffbe6';
+        promoDiv.style.border = '2px solid #ffe066';
+        promoDiv.style.borderRadius = '10px';
+        promoDiv.style.padding = '12px 0';
+        promoDiv.innerHTML = `<div style="font-size:1.2em;margin-bottom:8px;">Bauer umwandeln in:</div>`;
+        const color = promoteInfo.color;
+        const choices = color === 'w'
+            ? [{f:'Q',n:'Dame'},{f:'R',n:'Turm'},{f:'B',n:'Läufer'},{f:'N',n:'Springer'}]
+            : [{f:'q',n:'Dame'},{f:'r',n:'Turm'},{f:'b',n:'Läufer'},{f:'n',n:'Springer'}];
+        for (const ch of choices) {
+            const btn = document.createElement('button');
+            btn.innerText = pieceUnicode(ch.f) + ' ' + ch.n;
+            btn.style.fontSize = '1.1em';
+            btn.style.margin = '0 8px';
+            btn.style.padding = '6px 16px';
+            btn.style.borderRadius = '8px';
+            btn.onclick = () => promotePawn(promoteInfo.r, promoteInfo.c, ch.f);
+            promoDiv.appendChild(btn);
+        }
+        game.appendChild(promoDiv);
+    }
+
+    // Info/Meldung unter dem Spielfeld
+    const info = document.createElement('div');
+    info.style.marginTop = '18px';
+    info.style.fontSize = '1.2em';
+    info.style.minHeight = '1.5em';
+    if (infoMsg) {
+        info.innerText = infoMsg;
+        info.style.color = 'red';
+        info.style.fontWeight = 'bold';
+    } else if (promoteInfo) {
+        // Keine Info, Umwandlung läuft
+    } else if (gameOver) {
+        info.innerText = winnerText();
+        info.style.color = '';
+        info.style.fontWeight = '';
+    } else {
+        info.innerText = current === 'w' ? 'Weiß ist am Zug' : 'Schwarz ist am Zug';
+        info.style.color = '';
+        info.style.fontWeight = '';
+    }
+    game.appendChild(info);
+
+    // Reset-Button
+    const resetBtn = document.createElement('button');
+    resetBtn.innerText = 'Neustart';
+    resetBtn.onclick = resetGame;
+    resetBtn.style.marginTop = '10px';
+    resetBtn.style.padding = '8px 24px';
+    resetBtn.style.fontSize = '1.1em';
+    resetBtn.style.borderRadius = '8px';
+    resetBtn.style.background = '#ffe066';
+    resetBtn.style.border = '1px solid #b58863';
+    resetBtn.style.cursor = 'pointer';
+    game.appendChild(resetBtn);
+}
+
+function setTableListeners(table) {
+    table.onclick = function(e) {
+        if (promoteInfo || gameOver) return;
+        if (e.target.dataset.r !== undefined) {
+            handleMove(parseInt(e.target.dataset.r), parseInt(e.target.dataset.c));
+        }
+    };
+    table.ontouchstart = function(e) {
+        if (promoteInfo || gameOver) return;
         const touch = e.touches[0];
         const target = document.elementFromPoint(touch.clientX, touch.clientY);
         if (target && target.dataset.r !== undefined) {
             handleMove(parseInt(target.dataset.r), parseInt(target.dataset.c));
         }
-    });
-
-    const info = document.createElement('div');
-    info.style.marginTop = '10px';
-    if (gameOver) {
-        info.innerText = winnerText();
-    } else {
-        info.innerText = current === 'w' ? 'Weiß ist am Zug' : 'Schwarz ist am Zug';
-    }
-    game.appendChild(info);
-
-    const resetBtn = document.createElement('button');
-    resetBtn.innerText = 'Neustart';
-    resetBtn.onclick = resetGame;
-    resetBtn.style.marginTop = '10px';
-    game.appendChild(resetBtn);
+    };
 }
 
 function pieceUnicode(p) {
@@ -82,154 +151,366 @@ function pieceUnicode(p) {
     }[p] || '';
 }
 
-function handleInput(e) {
-    if (gameOver) return;
-    if (e.target.dataset.r !== undefined) {
-        handleMove(parseInt(e.target.dataset.r), parseInt(e.target.dataset.c));
-    }
-}
-
 function handleMove(r, c) {
-    if (gameOver) return;
+    if (gameOver || promoteInfo) return;
     const piece = board[r][c];
     if (!selected) {
         if (piece && ((current === 'w' && piece === piece.toUpperCase()) || (current === 'b' && piece === piece.toLowerCase()))) {
             selected = [r, c];
+            highlightMoves = getLegalMoves(r, c, board, current);
             render();
         }
     } else {
         if (selected[0] === r && selected[1] === c) {
             selected = null;
+            highlightMoves = [];
             render();
             return;
         }
-        if (isValidMove(selected[0], selected[1], r, c)) {
-            board[r][c] = board[selected[0]][selected[1]];
-            board[selected[0]][selected[1]] = '';
-            selected = null;
-            if (isCheckmate()) {
-                gameOver = true;
-            } else {
-                current = current === 'w' ? 'b' : 'w';
-                render();
-                if (mode === 'computer' && current === 'b' && !gameOver) {
-                    setTimeout(computerMove, 500);
-                }
-            }
-            render();
+        if (highlightMoves.some(([hr, hc]) => hr === r && hc === c)) {
+            makeMove(selected[0], selected[1], r, c);
         } else {
             selected = null;
+            highlightMoves = [];
             render();
         }
     }
 }
 
-function isValidMove(fr, fc, tr, tc) {
-    // Nur einfache Regeln: Ziehen auf leeres Feld oder Gegner, keine Spezialregeln
-    const piece = board[fr][fc];
-    if (!piece) return false;
-    const target = board[tr][tc];
-    if (piece === piece.toUpperCase() && target && target === target.toUpperCase()) return false;
-    if (piece === piece.toLowerCase() && target && target === target.toLowerCase()) return false;
-    // Nur einfache Bewegungen: Bauer, Turm, Springer, Läufer, Dame, König
-    const dr = tr - fr, dc = tc - fc;
-    switch (piece.toLowerCase()) {
-        case 'p':
-            if (piece === 'P') {
-                if (dc === 0 && dr === -1 && !target) return true;
-                if (fr === 6 && dc === 0 && dr === -2 && !target && !board[fr-1][fc]) return true;
-                if (Math.abs(dc) === 1 && dr === -1 && target && target === target.toLowerCase()) return true;
-            } else {
-                if (dc === 0 && dr === 1 && !target) return true;
-                if (fr === 1 && dc === 0 && dr === 2 && !target && !board[fr+1][fc]) return true;
-                if (Math.abs(dc) === 1 && dr === 1 && target && target === target.toUpperCase()) return true;
+function makeMove(fr, fc, tr, tc) {
+    let piece = board[fr][fc];
+    let target = board[tr][tc];
+    // Rochade
+    if (piece.toLowerCase() === 'k' && Math.abs(tc - fc) === 2) {
+        // Kurz
+        if (tc > fc) {
+            board[tr][tc] = piece;
+            board[fr][fc] = '';
+            board[tr][5] = board[tr][7];
+            board[tr][7] = '';
+        } else { // Lang
+            board[tr][tc] = piece;
+            board[fr][fc] = '';
+            board[tr][3] = board[tr][0];
+            board[tr][0] = '';
+        }
+    } else {
+        // En passant
+        if (piece.toLowerCase() === 'p' && fc !== tc && !target) {
+            board[tr][tc] = piece;
+            board[fr][fc] = '';
+            board[fr][tc] = '';
+        } else {
+            board[tr][tc] = piece;
+            board[fr][fc] = '';
+        }
+    }
+    // Bauernumwandlung
+    if ((piece === 'P' && tr === 0) || (piece === 'p' && tr === 7)) {
+        promoteInfo = {r: tr, c: tc, color: piece === 'P' ? 'w' : 'b'};
+        selected = null;
+        highlightMoves = [];
+        render();
+        return;
+    }
+    selected = null;
+    highlightMoves = [];
+    // Prüfe auf Schach, Matt, Patt
+    let status = getGameStatus(board, current === 'w' ? 'b' : 'w');
+    if (status === 'matt') {
+        gameOver = true;
+        infoMsg = 'Schachmatt!';
+    } else if (status === 'patt') {
+        gameOver = true;
+        infoMsg = 'Patt!';
+    } else if (status === 'schach') {
+        infoMsg = 'Schach!';
+        setTimeout(() => { infoMsg = ''; render(); }, 2000);
+    } else {
+        infoMsg = '';
+    }
+    current = current === 'w' ? 'b' : 'w';
+    render();
+    if (mode === 'computer' && current === 'b' && !gameOver && !promoteInfo) {
+        setTimeout(computerMove, 500);
+    }
+}
+
+function promotePawn(r, c, piece) {
+    board[r][c] = piece;
+    promoteInfo = null;
+    // Prüfe auf Schach, Matt, Patt nach Umwandlung
+    let status = getGameStatus(board, current === 'w' ? 'b' : 'w');
+    if (status === 'matt') {
+        gameOver = true;
+        infoMsg = 'Schachmatt!';
+    } else if (status === 'patt') {
+        gameOver = true;
+        infoMsg = 'Patt!';
+    } else if (status === 'schach') {
+        infoMsg = 'Schach!';
+        setTimeout(() => { infoMsg = ''; render(); }, 2000);
+    } else {
+        infoMsg = '';
+    }
+    current = current === 'w' ? 'b' : 'w';
+    render();
+    if (mode === 'computer' && current === 'b' && !gameOver && !promoteInfo) {
+        setTimeout(computerMove, 500);
+    }
+}
+
+// --- Schach-Logik ---
+
+function getLegalMoves(r, c, b, color) {
+    // Gibt alle legalen Züge für Figur an [r,c] zurück (inkl. Schachprüfung)
+    let moves = [];
+    const piece = b[r][c];
+    if (!piece) return moves;
+    const isWhite = piece === piece.toUpperCase();
+    const dirs = {
+        n: [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]],
+        b: [[-1,-1],[-1,1],[1,-1],[1,1]],
+        r: [[-1,0],[1,0],[0,-1],[0,1]],
+        q: [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]],
+        k: [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]]
+    };
+    // Bauer
+    if (piece.toLowerCase() === 'p') {
+        let dir = isWhite ? -1 : 1;
+        // Vorwärts
+        if (b[r+dir] && !b[r+dir][c]) moves.push([r+dir, c]);
+        // Doppelschritt
+        if ((isWhite && r === 6 || !isWhite && r === 1) && !b[r+dir][c] && !b[r+2*dir][c]) moves.push([r+2*dir, c]);
+        // Schlagen
+        for (let dc of [-1,1]) {
+            if (b[r+dir] && b[r+dir][c+dc] && ((isWhite && b[r+dir][c+dc] === b[r+dir][c+dc].toLowerCase()) || (!isWhite && b[r+dir][c+dc] === b[r+dir][c+dc].toUpperCase()))) {
+                moves.push([r+dir, c+dc]);
             }
-            break;
-        case 'r':
-            if ((dr === 0 || dc === 0) && clearPath(fr, fc, tr, tc)) return true;
-            break;
-        case 'n':
-            if ((Math.abs(dr) === 2 && Math.abs(dc) === 1) || (Math.abs(dr) === 1 && Math.abs(dc) === 2)) return true;
-            break;
-        case 'b':
-            if (Math.abs(dr) === Math.abs(dc) && clearPath(fr, fc, tr, tc)) return true;
-            break;
-        case 'q':
-            if (((dr === 0 || dc === 0) || (Math.abs(dr) === Math.abs(dc))) && clearPath(fr, fc, tr, tc)) return true;
-            break;
-        case 'k':
-            if (Math.abs(dr) <= 1 && Math.abs(dc) <= 1) return true;
-            break;
+        }
+        // En passant (vereinfachte Variante: nur im nächsten Zug nach Doppelschritt möglich, nicht gespeichert)
+        // (Nicht implementiert, da komplex für Einsteiger-Schach)
+    }
+    // Springer
+    if (piece.toLowerCase() === 'n') {
+        for (let [dr, dc] of dirs.n) {
+            let nr = r+dr, nc = c+dc;
+            if (nr>=0 && nr<8 && nc>=0 && nc<8 && (!b[nr][nc] || (isWhite && b[nr][nc] === b[nr][nc].toLowerCase()) || (!isWhite && b[nr][nc] === b[nr][nc].toUpperCase()))) {
+                moves.push([nr, nc]);
+            }
+        }
+    }
+    // Läufer, Turm, Dame
+    if ('brq'.includes(piece.toLowerCase())) {
+        let dlist = [];
+        if (piece.toLowerCase() === 'b') dlist = dirs.b;
+        if (piece.toLowerCase() === 'r') dlist = dirs.r;
+        if (piece.toLowerCase() === 'q') dlist = dirs.q;
+        for (let [dr, dc] of dlist) {
+            let nr = r+dr, nc = c+dc;
+            while (nr>=0 && nr<8 && nc>=0 && nc<8) {
+                if (!b[nr][nc]) {
+                    moves.push([nr, nc]);
+                } else {
+                    if ((isWhite && b[nr][nc] === b[nr][nc].toLowerCase()) || (!isWhite && b[nr][nc] === b[nr][nc].toUpperCase())) {
+                        moves.push([nr, nc]);
+                    }
+                    break;
+                }
+                nr += dr; nc += dc;
+            }
+        }
+    }
+    // König
+    if (piece.toLowerCase() === 'k') {
+        for (let [dr, dc] of dirs.k) {
+            let nr = r+dr, nc = c+dc;
+            if (nr>=0 && nr<8 && nc>=0 && nc<8 && (!b[nr][nc] || (isWhite && b[nr][nc] === b[nr][nc].toLowerCase()) || (!isWhite && b[nr][nc] === b[nr][nc].toUpperCase()))) {
+                moves.push([nr, nc]);
+            }
+        }
+        // Rochade (vereinfachte Variante: nur wenn König und Turm noch nicht gezogen, keine Schachprüfung)
+        if (isWhite && r === 7 && c === 4 && b[7][7] === 'R' && !b[7][5] && !b[7][6]) moves.push([7,6]);
+        if (isWhite && r === 7 && c === 4 && b[7][0] === 'R' && !b[7][3] && !b[7][2] && !b[7][1]) moves.push([7,2]);
+        if (!isWhite && r === 0 && c === 4 && b[0][7] === 'r' && !b[0][5] && !b[0][6]) moves.push([0,6]);
+        if (!isWhite && r === 0 && c === 4 && b[0][0] === 'r' && !b[0][3] && !b[0][2] && !b[0][1]) moves.push([0,2]);
+    }
+    // Filter: Kein Zug, der eigenen König ins Schach setzt
+    return moves.filter(([tr, tc]) => !wouldCauseCheck(r, c, tr, tc, b, color));
+}
+
+function wouldCauseCheck(fr, fc, tr, tc, b, color) {
+    // Simuliere Zug und prüfe, ob eigener König im Schach steht
+    let copy = b.map(row => row.slice());
+    copy[tr][tc] = copy[fr][fc];
+    copy[fr][fc] = '';
+    return isKingInCheck(copy, color);
+}
+
+function isKingInCheck(b, color) {
+    // Prüft, ob der König der Farbe 'color' im Schach steht
+    let king = color === 'w' ? 'K' : 'k';
+    let kr = -1, kc = -1;
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        if (b[r][c] === king) { kr = r; kc = c; }
+    }
+    if (kr === -1) return false;
+    // Suche alle gegnerischen Züge
+    let enemy = color === 'w' ? 'b' : 'w';
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        let p = b[r][c];
+        if (!p) continue;
+        if ((enemy === 'w' && p === p.toUpperCase()) || (enemy === 'b' && p === p.toLowerCase())) {
+            let moves = getLegalMoves(r, c, b, enemy, true); // true = keine Rekursion
+            if (moves.some(([mr, mc]) => mr === kr && mc === kc)) return true;
+        }
     }
     return false;
 }
 
-function clearPath(fr, fc, tr, tc) {
-    let dr = Math.sign(tr - fr), dc = Math.sign(tc - fc);
-    let r = fr + dr, c = fc + dc;
-    while (r !== tr || c !== tc) {
-        if (board[r][c]) return false;
-        r += dr; c += dc;
+function getLegalMoves(r, c, b, color, skipCheck) {
+    // Wie oben, aber skipCheck=true: keine wouldCauseCheck-Prüfung (für isKingInCheck)
+    let moves = [];
+    const piece = b[r][c];
+    if (!piece) return moves;
+    const isWhite = piece === piece.toUpperCase();
+    const dirs = {
+        n: [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]],
+        b: [[-1,-1],[-1,1],[1,-1],[1,1]],
+        r: [[-1,0],[1,0],[0,-1],[0,1]],
+        q: [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]],
+        k: [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]]
+    };
+    if (piece.toLowerCase() === 'p') {
+        let dir = isWhite ? -1 : 1;
+        if (b[r+dir] && !b[r+dir][c]) moves.push([r+dir, c]);
+        if ((isWhite && r === 6 || !isWhite && r === 1) && !b[r+dir][c] && !b[r+2*dir][c]) moves.push([r+2*dir, c]);
+        for (let dc of [-1,1]) {
+            if (b[r+dir] && b[r+dir][c+dc] && ((isWhite && b[r+dir][c+dc] === b[r+dir][c+dc].toLowerCase()) || (!isWhite && b[r+dir][c+dc] === b[r+dir][c+dc].toUpperCase()))) {
+                moves.push([r+dir, c+dc]);
+            }
+        }
     }
-    return true;
+    if (piece.toLowerCase() === 'n') {
+        for (let [dr, dc] of dirs.n) {
+            let nr = r+dr, nc = c+dc;
+            if (nr>=0 && nr<8 && nc>=0 && nc<8 && (!b[nr][nc] || (isWhite && b[nr][nc] === b[nr][nc].toLowerCase()) || (!isWhite && b[nr][nc] === b[nr][nc].toUpperCase()))) {
+                moves.push([nr, nc]);
+            }
+        }
+    }
+    if ('brq'.includes(piece.toLowerCase())) {
+        let dlist = [];
+        if (piece.toLowerCase() === 'b') dlist = dirs.b;
+        if (piece.toLowerCase() === 'r') dlist = dirs.r;
+        if (piece.toLowerCase() === 'q') dlist = dirs.q;
+        for (let [dr, dc] of dlist) {
+            let nr = r+dr, nc = c+dc;
+            while (nr>=0 && nr<8 && nc>=0 && nc<8) {
+                if (!b[nr][nc]) {
+                    moves.push([nr, nc]);
+                } else {
+                    if ((isWhite && b[nr][nc] === b[nr][nc].toLowerCase()) || (!isWhite && b[nr][nc] === b[nr][nc].toUpperCase())) {
+                        moves.push([nr, nc]);
+                    }
+                    break;
+                }
+                nr += dr; nc += dc;
+            }
+        }
+    }
+    if (piece.toLowerCase() === 'k') {
+        for (let [dr, dc] of dirs.k) {
+            let nr = r+dr, nc = c+dc;
+            if (nr>=0 && nr<8 && nc>=0 && nc<8 && (!b[nr][nc] || (isWhite && b[nr][nc] === b[nr][nc].toLowerCase()) || (!isWhite && b[nr][nc] === b[nr][nc].toUpperCase()))) {
+                moves.push([nr, nc]);
+            }
+        }
+        if (skipCheck) return moves;
+        if (isWhite && r === 7 && c === 4 && b[7][7] === 'R' && !b[7][5] && !b[7][6]) moves.push([7,6]);
+        if (isWhite && r === 7 && c === 4 && b[7][0] === 'R' && !b[7][3] && !b[7][2] && !b[7][1]) moves.push([7,2]);
+        if (!isWhite && r === 0 && c === 4 && b[0][7] === 'r' && !b[0][5] && !b[0][6]) moves.push([0,6]);
+        if (!isWhite && r === 0 && c === 4 && b[0][0] === 'r' && !b[0][3] && !b[0][2] && !b[0][1]) moves.push([0,2]);
+    }
+    if (!skipCheck) {
+        // Filter: Kein Zug, der eigenen König ins Schach setzt
+        moves = moves.filter(([tr, tc]) => !wouldCauseCheck(r, c, tr, tc, b, color));
+    }
+    return moves;
 }
 
-function isCheckmate() {
-    // Nur Matt durch Schlagen des Königs
-    let kings = 0;
-    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {
-        if (board[r][c] === 'K' || board[r][c] === 'k') kings++;
+function getGameStatus(b, color) {
+    // Gibt 'schach', 'matt', 'patt' oder '' zurück
+    if (isKingInCheck(b, color)) {
+        // Gibt es noch legale Züge?
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            let p = b[r][c];
+            if (!p) continue;
+            if ((color === 'w' && p === p.toUpperCase()) || (color === 'b' && p === p.toLowerCase())) {
+                if (getLegalMoves(r, c, b, color).length > 0) return 'schach';
+            }
+        }
+        return 'matt';
+    } else {
+        // Patt?
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            let p = b[r][c];
+            if (!p) continue;
+            if ((color === 'w' && p === p.toUpperCase()) || (color === 'b' && p === p.toLowerCase())) {
+                if (getLegalMoves(r, c, b, color).length > 0) return '';
+            }
+        }
+        return 'patt';
     }
-    return kings < 2;
 }
 
 function winnerText() {
-    if (board.flat().includes('K')) return 'Weiß gewinnt!';
-    if (board.flat().includes('k')) return 'Schwarz gewinnt!';
-    return 'Unentschieden!';
+    if (infoMsg === 'Schachmatt!') return current === 'w' ? 'Schwarz gewinnt!' : 'Weiß gewinnt!';
+    if (infoMsg === 'Patt!') return 'Unentschieden!';
+    return '';
 }
 
 function resetGame() {
-    board = [
-        ['r','n','b','q','k','b','n','r'],
-        ['p','p','p','p','p','p','p','p'],
-        ['','','','','','','',''],
-        ['','','','','','','',''],
-        ['','','','','','','',''],
-        ['','','','','','','',''],
-        ['P','P','P','P','P','P','P','P'],
-        ['R','N','B','Q','K','B','N','R']
-    ];
+    board = initialBoard();
     current = 'w';
     selected = null;
+    highlightMoves = [];
     gameOver = false;
+    promoteInfo = null;
+    infoMsg = '';
     render();
 }
 
 function computerMove() {
-    // Sucht alle möglichen Züge, wählt zufällig
-    let moves = [];
-    for (let fr = 0; fr < size; fr++) for (let fc = 0; fc < size; fc++) {
-        const piece = board[fr][fc];
-        if (piece && piece === piece.toLowerCase()) {
-            for (let tr = 0; tr < size; tr++) for (let tc = 0; tc < size; tc++) {
-                if (isValidMove(fr, fc, tr, tc)) moves.push([fr, fc, tr, tc]);
+    // Einfache KI: Materialgewinn oder Zufall
+    let allMoves = [];
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        let p = board[r][c];
+        if (p && p === p.toLowerCase()) {
+            let moves = getLegalMoves(r, c, board, 'b');
+            for (let [tr, tc] of moves) {
+                let value = 0;
+                if (board[tr][tc]) {
+                    // Materialwert
+                    value = {q:9, r:5, b:3, n:3, p:1, k:0}[board[tr][tc].toLowerCase()] || 0;
+                }
+                allMoves.push({from:[r,c], to:[tr,tc], value});
             }
         }
     }
-    if (moves.length === 0) return;
-    const [fr, fc, tr, tc] = moves[Math.floor(Math.random() * moves.length)];
-    board[tr][tc] = board[fr][fc];
-    board[fr][fc] = '';
-    if (isCheckmate()) {
-        gameOver = true;
+    if (allMoves.length === 0) return;
+    // 40% Zufall, sonst bester Materialzug
+    let move;
+    if (Math.random() < 0.4) {
+        move = allMoves[Math.floor(Math.random() * allMoves.length)];
     } else {
-        current = 'w';
+        allMoves.sort((a,b) => b.value - a.value);
+        move = allMoves[0];
     }
-    render();
+    makeMove(move.from[0], move.from[1], move.to[0], move.to[1]);
 }
 
 render();
-if (mode === 'computer' && current === 'b' && !gameOver) {
+if (mode === 'computer' && current === 'b' && !gameOver && !promoteInfo) {
     setTimeout(computerMove, 500);
 }
