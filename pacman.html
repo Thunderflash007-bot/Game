@@ -2,13 +2,12 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Schach</title>
+    <title>Pacman</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        .menu-btn {
+        .menu-btn, .sponsor-btn {
             position: absolute;
             top: 18px;
-            right: 24px;
             z-index: 10;
             padding: 10px 26px;
             font-size: 1.1em;
@@ -21,17 +20,19 @@
             font-weight: bold;
             transition: background 0.2s;
         }
-        .menu-btn:hover {
+        .menu-btn:hover, .sponsor-btn:hover {
             background: linear-gradient(90deg,#1877c9,#ffe066);
         }
+        .menu-btn { right: 24px; }
+        .sponsor-btn { right: 160px; }
     </style>
 </head>
 <body>
     <button class="menu-btn" onclick="window.location.href='index.html'">Menü</button>
-    <h1>Schach</h1>
+    <button class="sponsor-btn" onclick="window.open('https://store.c4g7.com/', '_blank')">Sponsor</button>
+    <h1>Pacman</h1>
     <div id="game"></div>
-    <button onclick="window.location.href='index.html'">Zurück</button>
-    <script src="schach.js"></script>
+    <script src="pacman.js"></script>
     <div style="width:100%;margin:40px 0 12px 0;text-align:center;">
         <a href="datenschutz.html" style="color:#1877c9;text-decoration:underline;font-size:1em;">Datenschutzerklärung</a>
     </div>
