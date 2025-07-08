@@ -20,6 +20,11 @@ let promoteInfo = null;
 let infoMsg = '';
 let mode = getMode();
 
+// --- Erweiterung: Rochade, En Passant, Bauernumwandlung, Schachprüfung ---
+// Zusätzliche Felder für Rochade und En Passant
+let castling = {w: {K: true, Q: true}, b: {K: true, Q: true}};
+let enPassant = null;
+
 function getMode() {
     const params = new URLSearchParams(window.location.search);
     return params.get('mode') || 'zweispieler';
@@ -182,27 +187,45 @@ function makeMove(fr, fc, tr, tc) {
     let target = board[tr][tc];
     // Rochade
     if (piece.toLowerCase() === 'k' && Math.abs(tc - fc) === 2) {
-        // Kurz
+        // Kurz (König nach rechts)
         if (tc > fc) {
             board[tr][tc] = piece;
             board[fr][fc] = '';
-            board[tr][5] = board[tr][7];
+            board[tr][fc+1] = board[tr][7];
             board[tr][7] = '';
-        } else { // Lang
+        } else { // Lang (König nach links)
             board[tr][tc] = piece;
             board[fr][fc] = '';
-            board[tr][3] = board[tr][0];
+            board[tr][fc-1] = board[tr][0];
             board[tr][0] = '';
         }
+        // Rochaderechte verlieren
+        if (current === 'w') castling.w.K = castling.w.Q = false;
+        if (current === 'b') castling.b.K = castling.b.Q = false;
+        enPassant = null;
     } else {
         // En passant
         if (piece.toLowerCase() === 'p' && fc !== tc && !target) {
             board[tr][tc] = piece;
             board[fr][fc] = '';
+            // Schlag den gegnerischen Bauern, der gerade im Vorbeigehen geschlagen wird
             board[fr][tc] = '';
         } else {
             board[tr][tc] = piece;
             board[fr][fc] = '';
+        }
+        // Rochaderechte verlieren, wenn König oder Turm zieht
+        if (piece === 'K') castling.w.K = castling.w.Q = false;
+        if (piece === 'k') castling.b.K = castling.b.Q = false;
+        if (piece === 'R' && fr === 7 && fc === 0) castling.w.Q = false;
+        if (piece === 'R' && fr === 7 && fc === 7) castling.w.K = false;
+        if (piece === 'r' && fr === 0 && fc === 0) castling.b.Q = false;
+        if (piece === 'r' && fr === 0 && fc === 7) castling.b.K = false;
+        // En passant setzen
+        if (piece.toLowerCase() === 'p' && Math.abs(tr - fr) === 2) {
+            enPassant = {r: (fr + tr) / 2, c: fc, color: current};
+        } else {
+            enPassant = null;
         }
     }
     // Bauernumwandlung
@@ -288,8 +311,10 @@ function getLegalMoves(r, c, b, color) {
                 moves.push([r+dir, c+dc]);
             }
         }
-        // En passant (vereinfachte Variante: nur im nächsten Zug nach Doppelschritt möglich, nicht gespeichert)
-        // (Nicht implementiert, da komplex für Einsteiger-Schach)
+        // En passant
+        if (enPassant && enPassant.r === r+dir && Math.abs(enPassant.c - c) === 1 && enPassant.color !== color) {
+            moves.push([r+dir, enPassant.c]);
+        }
     }
     // Springer
     if (piece.toLowerCase() === 'n') {
@@ -329,11 +354,37 @@ function getLegalMoves(r, c, b, color) {
                 moves.push([nr, nc]);
             }
         }
-        // Rochade (vereinfachte Variante: nur wenn König und Turm noch nicht gezogen, keine Schachprüfung)
-        if (isWhite && r === 7 && c === 4 && b[7][7] === 'R' && !b[7][5] && !b[7][6]) moves.push([7,6]);
-        if (isWhite && r === 7 && c === 4 && b[7][0] === 'R' && !b[7][3] && !b[7][2] && !b[7][1]) moves.push([7,2]);
-        if (!isWhite && r === 0 && c === 4 && b[0][7] === 'r' && !b[0][5] && !b[0][6]) moves.push([0,6]);
-        if (!isWhite && r === 0 && c === 4 && b[0][0] === 'r' && !b[0][3] && !b[0][2] && !b[0][1]) moves.push([0,2]);
+        // Rochade prüfen (nur wenn nicht im Schach und Felder frei und nicht bedroht)
+        if (!skipCheck) {
+            if (isWhite && r === 7 && c === 4) {
+                // Kurz
+                if (castling.w.K && b[7][5] === '' && b[7][6] === '' &&
+                    !isKingInCheck(b, 'w') &&
+                    !wouldCauseCheck(7,4,7,5,b,'w') &&
+                    !wouldCauseCheck(7,4,7,6,b,'w')
+                ) moves.push([7,6]);
+                // Lang
+                if (castling.w.Q && b[7][3] === '' && b[7][2] === '' && b[7][1] === '' &&
+                    !isKingInCheck(b, 'w') &&
+                    !wouldCauseCheck(7,4,7,3,b,'w') &&
+                    !wouldCauseCheck(7,4,7,2,b,'w')
+                ) moves.push([7,2]);
+            }
+            if (!isWhite && r === 0 && c === 4) {
+                // Kurz
+                if (castling.b.K && b[0][5] === '' && b[0][6] === '' &&
+                    !isKingInCheck(b, 'b') &&
+                    !wouldCauseCheck(0,4,0,5,b,'b') &&
+                    !wouldCauseCheck(0,4,0,6,b,'b')
+                ) moves.push([0,6]);
+                // Lang
+                if (castling.b.Q && b[0][3] === '' && b[0][2] === '' && b[0][1] === '' &&
+                    !isKingInCheck(b, 'b') &&
+                    !wouldCauseCheck(0,4,0,3,b,'b') &&
+                    !wouldCauseCheck(0,4,0,2,b,'b')
+                ) moves.push([0,2]);
+            }
+        }
     }
     // Filter: Kein Zug, der eigenen König ins Schach setzt
     return moves.filter(([tr, tc]) => !wouldCauseCheck(r, c, tr, tc, b, color));
@@ -478,6 +529,8 @@ function resetGame() {
     gameOver = false;
     promoteInfo = null;
     infoMsg = '';
+    castling = {w: {K: true, Q: true}, b: {K: true, Q: true}};
+    enPassant = null;
     render();
 }
 
