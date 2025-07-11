@@ -200,8 +200,8 @@ function makeMove(fr, fc, tr, tc) {
             board[tr][0] = '';
         }
         // Rochaderechte verlieren
-        if (current === 'w') castling.w.K = castling.w.Q = false;
-        if (current === 'b') castling.b.K = castling.b.Q = false;
+        if (piece === 'K') castling.w.K = castling.w.Q = false;
+        if (piece === 'k') castling.b.K = castling.b.Q = false;
         enPassant = null;
     } else {
         // En passant
@@ -209,7 +209,8 @@ function makeMove(fr, fc, tr, tc) {
             board[tr][tc] = piece;
             board[fr][fc] = '';
             // Schlag den gegnerischen Bauern, der gerade im Vorbeigehen geschlagen wird
-            board[fr][tc] = '';
+            let dir = piece === 'P' ? 1 : -1;
+            board[tr + dir][tc] = '';
         } else {
             board[tr][tc] = piece;
             board[fr][fc] = '';
@@ -313,7 +314,12 @@ function getLegalMoves(r, c, b, color) {
         }
         // En passant
         if (enPassant && enPassant.r === r+dir && Math.abs(enPassant.c - c) === 1 && enPassant.color !== color) {
-            moves.push([r+dir, enPassant.c]);
+            // Prüfe, ob der gegnerische Bauer wirklich da steht
+            let epRow = r, epCol = enPassant.c;
+            let epPiece = b[epRow][epCol];
+            if (epPiece && ((isWhite && epPiece === 'p') || (!isWhite && epPiece === 'P'))) {
+                moves.push([r+dir, enPassant.c]);
+            }
         }
     }
     // Springer
@@ -358,13 +364,19 @@ function getLegalMoves(r, c, b, color) {
         if (!skipCheck) {
             if (isWhite && r === 7 && c === 4) {
                 // Kurz
-                if (castling.w.K && b[7][5] === '' && b[7][6] === '' &&
+                if (
+                    castling.w.K &&
+                    b[7][5] === '' && b[7][6] === '' &&
+                    board[7][7] === 'R' &&
                     !isKingInCheck(b, 'w') &&
                     !wouldCauseCheck(7,4,7,5,b,'w') &&
                     !wouldCauseCheck(7,4,7,6,b,'w')
                 ) moves.push([7,6]);
                 // Lang
-                if (castling.w.Q && b[7][3] === '' && b[7][2] === '' && b[7][1] === '' &&
+                if (
+                    castling.w.Q &&
+                    b[7][3] === '' && b[7][2] === '' && b[7][1] === '' &&
+                    board[7][0] === 'R' &&
                     !isKingInCheck(b, 'w') &&
                     !wouldCauseCheck(7,4,7,3,b,'w') &&
                     !wouldCauseCheck(7,4,7,2,b,'w')
@@ -372,13 +384,19 @@ function getLegalMoves(r, c, b, color) {
             }
             if (!isWhite && r === 0 && c === 4) {
                 // Kurz
-                if (castling.b.K && b[0][5] === '' && b[0][6] === '' &&
+                if (
+                    castling.b.K &&
+                    b[0][5] === '' && b[0][6] === '' &&
+                    board[0][7] === 'r' &&
                     !isKingInCheck(b, 'b') &&
                     !wouldCauseCheck(0,4,0,5,b,'b') &&
                     !wouldCauseCheck(0,4,0,6,b,'b')
                 ) moves.push([0,6]);
                 // Lang
-                if (castling.b.Q && b[0][3] === '' && b[0][2] === '' && b[0][1] === '' &&
+                if (
+                    castling.b.Q &&
+                    b[0][3] === '' && b[0][2] === '' && b[0][1] === '' &&
+                    board[0][0] === 'r' &&
                     !isKingInCheck(b, 'b') &&
                     !wouldCauseCheck(0,4,0,3,b,'b') &&
                     !wouldCauseCheck(0,4,0,2,b,'b')
@@ -387,7 +405,10 @@ function getLegalMoves(r, c, b, color) {
         }
     }
     // Filter: Kein Zug, der eigenen König ins Schach setzt
-    return moves.filter(([tr, tc]) => !wouldCauseCheck(r, c, tr, tc, b, color));
+    if (!skipCheck) {
+        moves = moves.filter(([tr, tc]) => !wouldCauseCheck(r, c, tr, tc, b, color));
+    }
+    return moves;
 }
 
 function wouldCauseCheck(fr, fc, tr, tc, b, color) {
@@ -420,7 +441,7 @@ function isKingInCheck(b, color) {
 }
 
 function getLegalMoves(r, c, b, color, skipCheck) {
-    // Wie oben, aber skipCheck=true: keine wouldCauseCheck-Prüfung (für isKingInCheck)
+    // Gibt alle legalen Züge für Figur an [r,c] zurück (inkl. Schachprüfung)
     let moves = [];
     const piece = b[r][c];
     if (!piece) return moves;
@@ -432,16 +453,30 @@ function getLegalMoves(r, c, b, color, skipCheck) {
         q: [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]],
         k: [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]]
     };
+    // Bauer
     if (piece.toLowerCase() === 'p') {
         let dir = isWhite ? -1 : 1;
+        // Vorwärts
         if (b[r+dir] && !b[r+dir][c]) moves.push([r+dir, c]);
+        // Doppelschritt
         if ((isWhite && r === 6 || !isWhite && r === 1) && !b[r+dir][c] && !b[r+2*dir][c]) moves.push([r+2*dir, c]);
+        // Schlagen
         for (let dc of [-1,1]) {
             if (b[r+dir] && b[r+dir][c+dc] && ((isWhite && b[r+dir][c+dc] === b[r+dir][c+dc].toLowerCase()) || (!isWhite && b[r+dir][c+dc] === b[r+dir][c+dc].toUpperCase()))) {
                 moves.push([r+dir, c+dc]);
             }
         }
+        // En passant
+        if (enPassant && enPassant.r === r+dir && Math.abs(enPassant.c - c) === 1 && enPassant.color !== color) {
+            // Prüfe, ob der gegnerische Bauer wirklich da steht
+            let epRow = r, epCol = enPassant.c;
+            let epPiece = b[epRow][epCol];
+            if (epPiece && ((isWhite && epPiece === 'p') || (!isWhite && epPiece === 'P'))) {
+                moves.push([r+dir, enPassant.c]);
+            }
+        }
     }
+    // Springer
     if (piece.toLowerCase() === 'n') {
         for (let [dr, dc] of dirs.n) {
             let nr = r+dr, nc = c+dc;
@@ -450,6 +485,7 @@ function getLegalMoves(r, c, b, color, skipCheck) {
             }
         }
     }
+    // Läufer, Turm, Dame
     if ('brq'.includes(piece.toLowerCase())) {
         let dlist = [];
         if (piece.toLowerCase() === 'b') dlist = dirs.b;
@@ -470,6 +506,7 @@ function getLegalMoves(r, c, b, color, skipCheck) {
             }
         }
     }
+    // König
     if (piece.toLowerCase() === 'k') {
         for (let [dr, dc] of dirs.k) {
             let nr = r+dr, nc = c+dc;
@@ -477,12 +514,51 @@ function getLegalMoves(r, c, b, color, skipCheck) {
                 moves.push([nr, nc]);
             }
         }
-        if (skipCheck) return moves;
-        if (isWhite && r === 7 && c === 4 && b[7][7] === 'R' && !b[7][5] && !b[7][6]) moves.push([7,6]);
-        if (isWhite && r === 7 && c === 4 && b[7][0] === 'R' && !b[7][3] && !b[7][2] && !b[7][1]) moves.push([7,2]);
-        if (!isWhite && r === 0 && c === 4 && b[0][7] === 'r' && !b[0][5] && !b[0][6]) moves.push([0,6]);
-        if (!isWhite && r === 0 && c === 4 && b[0][0] === 'r' && !b[0][3] && !b[0][2] && !b[0][1]) moves.push([0,2]);
+        // Rochade prüfen (nur wenn nicht im Schach und Felder frei und nicht bedroht)
+        if (!skipCheck) {
+            if (isWhite && r === 7 && c === 4) {
+                // Kurz
+                if (
+                    castling.w.K &&
+                    b[7][5] === '' && b[7][6] === '' &&
+                    board[7][7] === 'R' &&
+                    !isKingInCheck(b, 'w') &&
+                    !wouldCauseCheck(7,4,7,5,b,'w') &&
+                    !wouldCauseCheck(7,4,7,6,b,'w')
+                ) moves.push([7,6]);
+                // Lang
+                if (
+                    castling.w.Q &&
+                    b[7][3] === '' && b[7][2] === '' && b[7][1] === '' &&
+                    board[7][0] === 'R' &&
+                    !isKingInCheck(b, 'w') &&
+                    !wouldCauseCheck(7,4,7,3,b,'w') &&
+                    !wouldCauseCheck(7,4,7,2,b,'w')
+                ) moves.push([7,2]);
+            }
+            if (!isWhite && r === 0 && c === 4) {
+                // Kurz
+                if (
+                    castling.b.K &&
+                    b[0][5] === '' && b[0][6] === '' &&
+                    board[0][7] === 'r' &&
+                    !isKingInCheck(b, 'b') &&
+                    !wouldCauseCheck(0,4,0,5,b,'b') &&
+                    !wouldCauseCheck(0,4,0,6,b,'b')
+                ) moves.push([0,6]);
+                // Lang
+                if (
+                    castling.b.Q &&
+                    b[0][3] === '' && b[0][2] === '' && b[0][1] === '' &&
+                    board[0][0] === 'r' &&
+                    !isKingInCheck(b, 'b') &&
+                    !wouldCauseCheck(0,4,0,3,b,'b') &&
+                    !wouldCauseCheck(0,4,0,2,b,'b')
+                ) moves.push([0,2]);
+            }
+        }
     }
+    // Filter: Kein Zug, der eigenen König ins Schach setzt
     if (!skipCheck) {
         // Filter: Kein Zug, der eigenen König ins Schach setzt
         moves = moves.filter(([tr, tc]) => !wouldCauseCheck(r, c, tr, tc, b, color));
@@ -535,32 +611,88 @@ function resetGame() {
 }
 
 function computerMove() {
-    // Einfache KI: Materialgewinn oder Zufall
+    // Verbesserte KI: Minimax-Tiefe 2, Materialbewertung, manchmal absichtlich schwächer
     let allMoves = [];
     for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
         let p = board[r][c];
         if (p && p === p.toLowerCase()) {
             let moves = getLegalMoves(r, c, board, 'b');
             for (let [tr, tc] of moves) {
-                let value = 0;
-                if (board[tr][tc]) {
-                    // Materialwert
-                    value = {q:9, r:5, b:3, n:3, p:1, k:0}[board[tr][tc].toLowerCase()] || 0;
-                }
-                allMoves.push({from:[r,c], to:[tr,tc], value});
+                allMoves.push({from:[r,c], to:[tr,tc]});
             }
         }
     }
     if (allMoves.length === 0) return;
-    // 40% Zufall, sonst bester Materialzug
-    let move;
-    if (Math.random() < 0.4) {
-        move = allMoves[Math.floor(Math.random() * allMoves.length)];
-    } else {
-        allMoves.sort((a,b) => b.value - a.value);
-        move = allMoves[0];
+
+    // Bewertung aller Züge mit Minimax (Tiefe 2)
+    function evaluateBoard(b) {
+        // Materialbewertung + Bonus für Schach, Matt, Drohungen
+        let value = 0;
+        const pieceVals = {q:9, r:5, b:3, n:3, p:1, k:0};
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            let p = b[r][c];
+            if (!p) continue;
+            let v = pieceVals[p.toLowerCase()] || 0;
+            if (p === p.toLowerCase()) value += v;
+            else value -= v;
+        }
+        // Bonus/Malus für Schach/Matt
+        let status = getGameStatus(b, 'w');
+        if (status === 'matt') value += 1000;
+        if (status === 'schach') value += 0.5;
+        status = getGameStatus(b, 'b');
+        if (status === 'matt') value -= 1000;
+        if (status === 'schach') value -= 0.5;
+        return value + (Math.random()-0.5)*0.01; // kleine Zufallsstreuung
     }
-    makeMove(move.from[0], move.from[1], move.to[0], move.to[1]);
+
+    function cloneBoard(b) {
+        return b.map(row => row.slice());
+    }
+
+    function makeMoveOnBoard(b, move) {
+        let newB = cloneBoard(b);
+        let piece = newB[move.from[0]][move.from[1]];
+        newB[move.to[0]][move.to[1]] = piece;
+        newB[move.from[0]][move.from[1]] = '';
+        // Bauernumwandlung (immer Dame)
+        if (piece === 'p' && move.to[0] === 7) newB[move.to[0]][move.to[1]] = 'q';
+        return newB;
+    }
+
+    // Minimax Tiefe 2: Computer (max), dann Spieler (min)
+    let moveScores = allMoves.map(move => {
+        let after = makeMoveOnBoard(board, move);
+        // Spielerzug simulieren
+        let minScore = Infinity;
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            let p = after[r][c];
+            if (p && p === p.toUpperCase()) {
+                let moves = getLegalMoves(r, c, after, 'w');
+                for (let [tr, tc] of moves) {
+                    let after2 = makeMoveOnBoard(after, {from:[r,c],to:[tr,tc]});
+                    let score = evaluateBoard(after2);
+                    
+                }
+            }
+        }
+        // Falls Spieler keine Züge hat (Matt/Patt)
+        if (minScore === Infinity) minScore = evaluateBoard(after);
+        return {move, score: minScore};
+    });
+
+    // Sortiere nach bester Bewertung (höchster Score ist am besten für Schwarz)
+    moveScores.sort((a, b) => b.score - a.score);
+
+    // Schwierigkeitsgrad: ca. jedes 3. Mal absichtlich schlechterer Zug
+    let idx = 0;
+    if (Math.random() < 0.33 && moveScores.length > 2) {
+        // Wähle einen der 3 besten Züge zufällig, aber nicht immer den besten
+        idx = Math.floor(Math.random() * Math.min(3, moveScores.length));
+    }
+    let chosen = moveScores[idx].move;
+
+    makeMove(chosen.from[0], chosen.from[1], chosen.to[0], chosen.to[1]);
 }
 
 render();

@@ -32,16 +32,123 @@
         .menu-btn:hover {
             background: linear-gradient(90deg,#1877c9,#ffe066);
         }
+        .info-btn {
+            position: absolute;
+            top: 18px;
+            left: 24px;
+            z-index: 20;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(90deg,#ffe066,#1877c9);
+            color: #222;
+            font-size: 1.5em;
+            font-weight: bold;
+            box-shadow: 0 2px 8px #bbb;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .info-btn:hover {
+            background: linear-gradient(90deg,#1877c9,#ffe066);
+        }
+        .info-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0; top: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.35);
+            align-items: center;
+            justify-content: center;
+        }
+        .info-modal-content {
+            background: #fffbe6;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px #8888;
+            padding: 32px 28px 24px 28px;
+            max-width: 420px;
+            margin: 60px auto;
+            position: relative;
+        }
+        .info-modal-content h2 {
+            margin-top: 0;
+            color: #1877c9;
+            font-size: 1.5em;
+        }
+        .info-modal-content ul {
+            margin-left: 1.2em;
+            margin-bottom: 0.8em;
+        }
+        .info-modal-close {
+            position: absolute;
+            top: 12px;
+            right: 18px;
+            font-size: 1.5em;
+            color: #888;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .info-modal-close:hover {
+            color: #c00;
+        }
     </style>
 </head>
 <body>
+    <button class="info-btn" id="schach-info-btn" title="Schach-Regeln anzeigen">i</button>
     <button class="menu-btn" onclick="window.location.href='index.html'">Menü</button>
     <h1>Schach</h1>
     <div id="game"></div>
     <button onclick="window.location.href='index.html'">Zurück</button>
     <script src="schach.js"></script>
+    <!-- Info-Popup -->
+    <div class="info-modal" id="schach-info-modal">
+        <div class="info-modal-content">
+            <button class="info-modal-close" id="schach-info-close" title="Schließen">&times;</button>
+            <h2>Schach – Regeln</h2>
+            <ul>
+                <li>Ziel: Setze den gegnerischen König schachmatt.</li>
+                <li>Jede Figur hat eigene Zugregeln:
+                    <ul>
+                        <li><b>Bauer:</b> 1 Feld vorwärts, schlägt diagonal. Beim ersten Zug 2 Felder möglich. <b>En passant</b> ist möglich.</li>
+                        <li><b>Turm:</b> beliebig weit waagerecht oder senkrecht.</li>
+                        <li><b>Läufer:</b> beliebig weit diagonal.</li>
+                        <li><b>Dame:</b> beliebig weit in alle Richtungen.</li>
+                        <li><b>König:</b> 1 Feld in jede Richtung. <b>Rochade</b> ist möglich.</li>
+                        <li><b>Pferd:</b> L-förmig (2+1 Felder).</li>
+                    </ul>
+                </li>
+                <li>Schach: Der König wird bedroht und muss geschützt werden.</li>
+                <li>Schachmatt: Der König kann nicht mehr entkommen – das Spiel ist verloren.</li>
+                <li>Patt: Kein legaler Zug, aber der König steht nicht im Schach – Unentschieden.</li>
+                <li>Bauernumwandlung: Erreicht ein Bauer die gegnerische Grundreihe, wird er zur Dame, Turm, Läufer oder Springer.</li>
+                <li><b>Rochade/En passant:</b> Beide sind nicht in dieser Version vorhanden, wir arbeiten daran.</li>
+            </ul>
+            <div style="text-align:center;font-size:1em;color:#888;margin-top:10px;">
+                <b>Tipp:</b> Klicke auf eine Figur, dann auf das Zielfeld.<br>
+                Spiele gegen den Computer oder zu zweit!
+            </div>
+        </div>
+    </div>
     <div style="width:100%;margin:40px 0 12px 0;text-align:center;">
         <a href="datenschutz.html" style="color:#1877c9;text-decoration:underline;font-size:1em;">Datenschutzerklärung</a>
     </div>
+    <script>
+        // Info-Button & Modal-Logik
+        document.getElementById('schach-info-btn').onclick = function() {
+            document.getElementById('schach-info-modal').style.display = 'flex';
+        };
+        document.getElementById('schach-info-close').onclick = function() {
+            document.getElementById('schach-info-modal').style.display = 'none';
+        };
+        // Schließen bei Klick außerhalb des Modals
+        document.getElementById('schach-info-modal').onclick = function(e) {
+            if (e.target === this) this.style.display = 'none';
+        };
+    </script>
 </body>
 </html>
