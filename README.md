@@ -5,7 +5,7 @@ Hier findest du eine Sammlung klassischer und moderner Browser-Spiele, die du di
 
 ## Spieleübersicht
 
-- 4 Gewinnt
+- 4 Gewinnt (auch gegen Computer)
 - Pong
 - Schach (mit Computer-Gegner)
 - Schiffe versenken
